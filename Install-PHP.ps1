@@ -117,7 +117,11 @@ $PhpIni = "$InstallPath\php.ini"
 'date.timezone="UTC"' | Out-File $PhpIni -Append -Encoding utf8
 'extension_dir=ext' | Out-File $PhpIni -Append -Encoding utf8
 foreach ($extension in $Extensions) {
-    "extension=php_$extension.dll" | Out-File $PhpIni -Append -Encoding utf8
+    if ($ToInstall.version -ge 7.2.0) {
+        "extension=php_$extension" | Out-File $PhpIni -Append -Encoding utf8
+    } else {
+        "extension=php_$extension.dll" | Out-File $PhpIni -Append -Encoding utf8
+    }
 }
 
 try {
