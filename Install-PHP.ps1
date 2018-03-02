@@ -5,12 +5,19 @@
   [switch]$ThreadSafe,
   [string]$Arch = "x86",
   [string]$InstallPath = "C:\tools\php",
+  [switch]$Debug,
   [array]$Extensions
 )
+if ($Debug) {
+    Write-Output $PSVersionTable
+}
+
 Add-Type -assembly "System.IO.Compression.FileSystem"
 
 $Arch = $Arch.ToUpper()
-if ($Arch -notin @("X86", "X64")) {
+$ArchVersions = "X86", "X64"
+
+if (!$ArchVersions.Contains($Arch)) {
     throw "The arch value must be x86 or x64. Got: $Arch"
 }
 if ($Highest -and $Lowest) {
@@ -31,20 +38,23 @@ if ($Version) {
 }
 
 $VC = @{
-    "VC6_X86" = "https://download.microsoft.com/download/d/3/4/d342efa6-3266-4157-a2ec-5174867be706/vcredist_x86.exe"
-    "VC9_X86" = "https://download.microsoft.com/download/1/1/1/1116b75a-9ec3-481a-a3c8-1777b5381140/vcredist_x86.exe";
-    "VC11_X64" = "https://download.microsoft.com/download/1/6/B/16B06F60-3B20-4FF2-B699-5E9B7962F9AE/VSU_4/vcredist_x64.exe";
-    "VC11_X86" = "https://download.microsoft.com/download/1/6/B/16B06F60-3B20-4FF2-B699-5E9B7962F9AE/VSU_4/vcredist_x86.exe";
-    "VC14_X86" = "https://download.microsoft.com/download/9/3/F/93FCF1E7-E6A4-478B-96E7-D4B285925B00/vc_redist.x86.exe"; 
-    "VC14_X64" = "https://download.microsoft.com/download/9/3/F/93FCF1E7-E6A4-478B-96E7-D4B285925B00/vc_redist.x64.exe";
-    "VC15_X86" = "https://download.microsoft.com/download/4/9/5/495e9ce4-e3a3-4055-8499-999dc2474a3c/vc_redist.x86.exe";
-    "VC15_X64" = "https://download.microsoft.com/download/a/b/2/ab2cc1b4-d275-4d73-8d1a-23733eb27763/vc_redist.x64.exe"
+    "VC14_X86" = "https://download.microsoft.com/download/9/3/F/93FCF1E7-E6A4-478B-96E7-D4B285925B00/vc_redist.x86.exe"
+    "VC14_X64" = "https://download.microsoft.com/download/9/3/F/93FCF1E7-E6A4-478B-96E7-D4B285925B00/vc_redist.x64.exe"
+    "VC15_X86" = "https://download.microsoft.com/download/6/A/A/6AA4EDFF-645B-48C5-81CC-ED5963AEAD48/vc_redist.x86.exe"
+    "VC15_X64" = "https://download.microsoft.com/download/6/A/A/6AA4EDFF-645B-48C5-81CC-ED5963AEAD48/vc_redist.x64.exe"
 }
 
 Write-Output "Checking for downloadable PHP versions..."
+
 $AllVersions = @()
-foreach ($url in @("http://windows.php.net/downloads/releases/", "http://windows.php.net/downloads/releases/archives/", "http://windows.php.net/downloads/qa/")) {
-    $Page = Invoke-WebRequest -URI $url
+foreach ($url in @("https://windows.php.net/downloads/releases/", "https://windows.php.net/downloads/releases/archives/", "https://windows.php.net/downloads/qa/")) {
+    if ($Debug) {
+        Write-Output "Searching in $url";
+    }
+
+    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+
+    $Page = Invoke-WebRequest -URI $url -Method GET -TimeoutSec 5
 
     $Page.Links | Where-Object { $_.innerText -match "^php-((\d{1,}\.\d{1,}\.\d{1,})|(\d{1,}\.\d{1,}\.\d{1,})([A-Z]+[0-9]+))-(nts-)?.*(VC\d\d?)-(x\d\d).zip" } | ForEach-Object {
         $php = @{}
@@ -71,53 +81,63 @@ if ($Version -and $Highest) {
 }
 
 if (!$ToInstall) {
-    throw "Unable to find an installable version of $Arch PHP $Version. Check that the version specified is correct."
+    throw "Unable to find an installable version of $Arch PHP $Version, check that the version specified is correct."
 }
 
-$PhpFileName = [Uri]::new([Uri]$ToInstall.url).Segments[-1]
-$DownloadFile = ($InstallPath + '\' + $PhpFileName)
+$PhpZipFileName = [Uri]::new([Uri]$ToInstall.url).Segments[-1]
+$DownloadFilePath = ($InstallPath + '\' + $PhpZipFileName)
 
 $VcFileName = [Uri]::new([Uri]$VC[$ToInstall.vc]).Segments[-1]
-$VcDownloadFile = ($InstallPath + '\' + $VcFileName)
+$VcDownloadFilePath = ($InstallPath + '\' + $VcFileName)
 
 New-Item -ItemType Directory -Force -Path $InstallPath | Out-Null
 
 Write-Output ("Downloading PHP " + $ToInstall.version + " $Arch...")
 try {
-    (New-Object System.Net.WebClient).DownloadFile($ToInstall.url, $DownloadFile)
+    Invoke-WebRequest $ToInstall.url -OutFile $DownloadFilePath -ErrorAction Stop
 } catch {
     throw ("Unable to download PHP from: " + $ToInstall.url)
 }
 
 Write-Output ("Downloading " + $ToInstall.vc + " redistributable...")
 try {
-    (New-Object System.Net.WebClient).DownloadFile($VC[$ToInstall.vc], $VcDownloadFile)
+    Invoke-WebRequest $VC[$ToInstall.vc] -OutFile $VcDownloadFilePath -ErrorAction Stop
 } catch {
     throw ("Unable to download " + $ToInstall.vc + "  from: " + $VC[$ToInstall.vc])
 }
 
 Write-Output ("Installing " + $ToInstall.vc + " redistributable...")
-& $VcDownloadFile /q /norestart
-if(-not $?) {
+
+$process = (Start-Process -FilePath $VcDownloadFilePath -ArgumentList "/q /norestart")
+
+if ($process.ExitCode) {
+  Write-Output "Errorcode: " $process.ExitCode
+}
+
+if (-not $?) {
     throw ("Unable to install " + $ToInstall.vc)
 }
-Remove-Item $VcDownloadFile -Force -ErrorAction SilentlyContinue | Out-Null
+Remove-Item $VcDownloadFilePath -Force -ErrorAction SilentlyContinue | Out-Null
 
 Write-Output ("Extracting PHP " + $ToInstall.version + " $Arch to: " + $InstallPath)
 try {
-    [IO.Compression.ZipFile]::ExtractToDirectory($DownloadFile, $InstallPath)
+    [IO.Compression.ZipFile]::ExtractToDirectory($DownloadFilePath, $InstallPath)
 } catch {
-    throw "Unable to extract PHP from ZIP"
+    $ErrorMessage = $_.Exception.Message
+
+    throw "Unable to extract PHP from ZIP with the error message " + $ErrorMessage
 }
-Remove-Item $DownloadFile -Force -ErrorAction SilentlyContinue | Out-Null
+
+Remove-Item $DownloadFilePath -Force -ErrorAction SilentlyContinue | Out-Null
 
 Rename-Item "$InstallPath\php.ini-development" -NewName "php.ini" -ErrorAction Stop
 $PhpIni = "$InstallPath\php.ini"
 
 'date.timezone="UTC"' | Out-File $PhpIni -Append -Encoding utf8
 'extension_dir=ext' | Out-File $PhpIni -Append -Encoding utf8
+
 foreach ($extension in $Extensions) {
-    if ($ToInstall.version -ge 7.2.0) {
+    if ($ToInstall.version -ge "7.2.0") {
         "extension=php_$extension" | Out-File $PhpIni -Append -Encoding utf8
     } else {
         "extension=php_$extension.dll" | Out-File $PhpIni -Append -Encoding utf8
@@ -127,6 +147,7 @@ foreach ($extension in $Extensions) {
 try {
     $Reg = "Registry::HKLM\System\CurrentControlSet\Control\Session Manager\Environment"
     $OldPath = (Get-ItemProperty -Path $Reg -Name PATH).Path
+
     if (($OldPath -split ';') -notcontains $InstallPath){
         Set-ItemProperty -Path $Reg -Name PATH –Value ($OldPath + ’;’ + $InstallPath)
     }
