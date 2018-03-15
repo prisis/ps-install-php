@@ -3,6 +3,10 @@ PHP Install Script for AppVeyor
 
 ## Script Arguments
 
+### -Debug
+
+Shows some infos about the power shell
+
 ### -Version
 
 The PHP version to install. `-Version 7.1.1`
@@ -25,7 +29,7 @@ The above will select the lowest release of PHP 7.1.x.
 
 ### -Arch
 
-Select a specific architecture type for PHP: x86, x64
+Select a specific architecture type for PHP: x86, x64. Defaults to `x86`.
 
 `-Arch x64`
 

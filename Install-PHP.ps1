@@ -29,9 +29,11 @@ if (!$Version -and ($Highest -or $Lowest)) {
 
 if ($Version) {
     $Version = New-Object -TypeName System.Version($Version)
+
     if (($Highest -or $Lowest) -and $Version.Build -ne $null) {
        throw "To Select the highest or lowest version you must not specify an exact version." 
     }
+
     if (!($Highest -or $Lowest) -and [int]$Version.Build -eq $null) {
        throw "If you don't select the highest or lowest version, you must specify an exact version." 
     }
