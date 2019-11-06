@@ -60,11 +60,17 @@ foreach ($url in @("https://windows.php.net/downloads/releases/", "https://windo
 
     $Page.Links | Where-Object { $_.innerText -match "^php-((\d{1,}\.\d{1,}\.\d{1,})|(\d{1,}\.\d{1,}\.\d{1,})([A-Z]+[0-9]+))-(nts-)?.*(VC\d\d?)-(x\d\d).zip" } | ForEach-Object {
         $php = @{}
+        
+        $absoluteUri = [Uri]::new([Uri]$url, $_.href).AbsoluteUri
+        
+        if ($Debug) {
+            Write-Output "Found php $absoluteUri";
+        }
 
         $php['version'] = New-Object -TypeName System.Version($Matches[3])
         $php['vc'] = ($Matches[6] + '_' + $Matches[7]).ToUpper()
         $php['arch'] = $Matches[7].ToUpper()
-        $php['url'] = [Uri]::new([Uri]$url, $_.href).AbsoluteUri
+        $php['url'] = $absoluteUri
         $php['ts'] = ![bool]$Matches[5]
 
         $AllVersions += $php
