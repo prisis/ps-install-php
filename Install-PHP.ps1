@@ -62,7 +62,7 @@ foreach ($url in @("https://windows.php.net/downloads/releases/", "https://windo
         $php = @{}
         
         $absoluteUri = [Uri]::new([Uri]$url, $_.href).AbsoluteUri
-        
+
         if ($Debug) {
             Write-Output "Found php $absoluteUri";
         }
